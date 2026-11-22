@@ -1,0 +1,62 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invento-backend
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - invento-network
+
+  frontend:
+    build:
+      context: ../Invento_Frontend
+      dockerfile: Dockerfile
+    container_name: invento-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - invento-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: invento-redis
+    restart: unless-stopped
+    ports:
+      # Port 6379 exposed to host so the Gateway EC2 can connect to it across private VPC
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - invento-network
+
+networks:
+  invento-network:
+    driver: bridge
+
+volumes:
+  redis_data:
